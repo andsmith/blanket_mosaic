@@ -17,7 +17,6 @@ class CellEditor(object):
                        'spacer_width_decrease': ';',
                        'spacer_width_increase': "'"}
 
-
     def __init__(self, w=3, h=3, colors=None, change_callback=None, asynch=False, name=None, constraints=None,
                  hotkeys=None):
         """
@@ -58,7 +57,8 @@ class CellEditor(object):
         for k in self._constraints:
             self._constraints[k].set_constraint(k, self)
         self._disp_window_name = "Cell Editor - %s" % (name,)
-        print("Cell Editor hotkeys: \n\tF to finish\n\t=- magnify, \n\top height pixels, \n\t[] width pixels\n\t;' spacer height\n")
+        print(
+            "Cell Editor hotkeys: \n\tF to finish\n\t=- magnify, \n\top height pixels, \n\t[] width pixels\n\t;' spacer height\n")
 
         cv2.namedWindow(self._disp_window_name)
         cv2.startWindowThread()
@@ -86,7 +86,6 @@ class CellEditor(object):
 
     def _update(self, no_callback=False, no_regenerate=False):
         if not no_regenerate:
-            print(self._x)
             self._image = make_pixel_image(self._x, self._colors, self._pixel_size, self._grid_size)
         if self._callback is not None and not no_callback:
             self._callback(self._x, self._name)
@@ -101,7 +100,10 @@ class CellEditor(object):
             if row is not None:
                 self._change_pixel(row, col)
 
-    def _change_pixel(self, row, col):
+    def _change_pixel(self, row, col, bound_check=False):
+        if not (0 <= row <= self._x.shape[0] and 0 <= col < self._x.shape[1]):
+            if not bound_check:
+                raise Exception("Pixel change out of bounds.")
         if self._mode == 'flip':
             with self._mutex:
                 self._x[row, col] = 1 - self._x[row, col]
@@ -135,7 +137,7 @@ class CellEditor(object):
                 return True
             if self._constraints[dim] not in marked:
                 marked.append(self._constraints[dim])
-                return self._constraints[dim].dim_is_locked(dim, marked = marked)
+                return self._constraints[dim].dim_is_locked(dim, marked=marked)
         return False
 
     def __del__(self):
@@ -224,7 +226,7 @@ class CellEditor(object):
                     self.change_dims('h', 1)
 
             elif keymatch(key, self._hotkeys['spacer_width_decrease']):
-                if self._name =="spacer_pattern":
+                if self._name == "spacer_pattern":
                     self.change_dims('w', -1)
             elif keymatch(key, self._hotkeys['spacer_width_increase']):
                 if self._name == "spacer_pattern":
@@ -235,7 +237,7 @@ class CellEditor(object):
             elif not key == 0xFF:
                 print("Unknown keypress:  %s" % (key,))
         cv2.destroyWindow(self._disp_window_name)
-        print("%s - Ended main loop." % (self._name, ))
+        print("%s - Ended main loop." % (self._name,))
 
 
 def cell_editor_test():

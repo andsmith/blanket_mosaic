@@ -26,7 +26,7 @@ class BlanketEditor(object):
         self._finished = False
         self._cells = []
         self._colors = colors if colors is not None else np.array([COLORS['cream'], COLORS['sky_blue']])
-        self._px_size = 4
+        self._px_size = 8
         self._box_thickness = 1
         self._rotation_direction = 1
         self._window_name = "mosaic blanket!"
@@ -48,7 +48,6 @@ class BlanketEditor(object):
         x = np.zeros((self._h, self._w), dtype=np.int64)
 
         # add cell rows
-        print("Cells:\n\t%s" % ("\n\t".join(["%s, %s" % (c.x.shape, c.origin) for c in self._cells+ [self._current_pattern]]), ))
         for c in self._cells + [self._current_pattern]:
 
             # draw horizontal:
@@ -57,8 +56,8 @@ class BlanketEditor(object):
             spacer_vert = np.rot90(spacer, k=1)
             cx_vert = np.rot90(c.x, k=1)
 
-            n_chunks_w = int((self._w - c.origin[1] * 2.0 - c.x.shape[0] - spacer.shape[1]) / c.x.shape[1])
-            n_chunks_h = int((self._h - c.origin[0] * 2.0 - c.x.shape[0] - spacer.shape[1]) / c.x.shape[1])
+            n_chunks_w = int((self._w - c.origin[1] - c.x.shape[0] - spacer.shape[1]) / c.x.shape[1])
+            n_chunks_h = int((self._h - c.origin[0] - c.x.shape[0] - spacer.shape[1]) / c.x.shape[1])
             for w_chunk in range(n_chunks_w):
                 row = c.origin[0]
                 col = c.origin[1] + w_chunk * c.x.shape[1]
@@ -74,9 +73,8 @@ class BlanketEditor(object):
                 if spacer.size > 0:
                     row += spacer_vert.shape[0]
                     if h_chunk == 0:
-
                         x[c.origin[0] + c.x.shape[0]: c.origin[0] + c.x.shape[0] + spacer_vert.shape[0],
-                          c.origin[1]: c.origin[1] + spacer_vert.shape[1]] = spacer_vert
+                        c.origin[1]: c.origin[1] + spacer_vert.shape[1]] = spacer_vert
                 x[row: row + cx_vert.shape[0], col:col + cx_vert.shape[1]] = cx_vert
 
         # make into viewable image
@@ -150,7 +148,7 @@ class BlanketEditor(object):
                 self._cell_editor = None
 
                 # advance, using last used shape
-                self._pos += np.array(self._cells[-1].x.shape)
+                self._pos += np.array([self._cells[-1].x.shape[0], self._cells[-1].x.shape[0]])
 
                 # set up for next cell editor
                 self._current_pattern = PatternCell(x=None, origin=self._pos.copy())
@@ -158,7 +156,6 @@ class BlanketEditor(object):
             # updated display
             # with self._dimage_lock:  # prob. unnecessary
             if self._display_image is None:
-
                 self._refresh()
 
             if self._display_image is not None:
@@ -177,6 +174,7 @@ class BlanketEditor(object):
             if keymatch(key, ' '):
 
                 if self._spacer_editor is None and self._cell_editor is not None:
+
                     # Add a spacer, if not already existing.
                     self._spacer_editor = CellEditor(w=1,
                                                      h=self._current_pattern.x.shape[0],
@@ -187,9 +185,9 @@ class BlanketEditor(object):
 
                 else:
                     # Otherwise disconnect & delete it
-
                     self._spacer_editor.finish()
-                    self._current_pattern.spacer=None
+                    self._spacer_editor = None
+                    self._current_pattern.spacer = None
                     self._display_image = None
                     self._image = None
 
@@ -212,7 +210,8 @@ class BlanketEditor(object):
                 filenum += 1
             else:
                 break
-        cv2.imwrite(filename, self._display_image[:, :, ::-1])
+        cv2.imwrite(filename, self._image[:, :, ::-1])
+
         print("Wrote:  %s" % (filename,))
 
 
@@ -221,8 +220,8 @@ def setup():
     parser.add_argument('--symmetry', '-s', type=str,
                         help="Blanket symmetry, must be one of:  %s." % (", ".join(BlanketEditor.SYMMETRIES),),
                         default='rotational')
-    parser.add_argument('--width', '-w', type=float, help="Width of blanket (total stitches)", default=64)
-    parser.add_argument('--height', '-t', type=float, help="Width of blanket (total stitches)", default=64)
+    parser.add_argument('--width', '-w', type=float, help="Width of blanket (total stitches)", default=128)
+    parser.add_argument('--height', '-t', type=float, help="Width of blanket (total stitches)", default=128)
     parsed = parser.parse_args()
 
     b = BlanketEditor(parsed.width, parsed.height, parsed.symmetry)
