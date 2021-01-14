@@ -4,8 +4,9 @@ import numpy as np
 import cv2
 from threading import Thread
 from cell import CellEditor
+import cPickle as cp
 
-from util import COLORS, make_pixel_image, keymatch
+from util import COLORS, make_pixel_image, keymatch, get_incremental_filename
 
 
 class PatternCell(object):
@@ -18,7 +19,7 @@ class PatternCell(object):
 class BlanketEditor(object):
     SYMMETRIES = ('rotational', 'translational')
 
-    def __init__(self, w, h, symmetry, colors=None):
+    def __init__(self, w, h, symmetry, colors=None, load_file=None):
         if symmetry not in self.SYMMETRIES:
             raise Exception("symmetry must be on eof %s" % (self.SYMMETRIES,))
         self._row_parity = 0
@@ -36,9 +37,42 @@ class BlanketEditor(object):
         self._pos = (0, 0)  # where next cell goes
         self._current_pattern = PatternCell(None, origin=np.array(self._pos))
 
+        if load_file is not None:
+            self.load(load_file)
+
         # blanket & w/annotations
         self._image = None
         self._display_image = None  # same here
+
+    def save(self):
+        image_name = get_incremental_filename("blanket_", ".png")
+        save_name = get_incremental_filename("blanket_",".pkl")
+        cv2.imwrite(image_name, self._image[:, :, ::-1])
+        print("Wrote:  %s" % (image_name,))
+
+        data = {'w': self._w,
+                'h': self._h,
+                'colors': self._colors,
+                'cells': self._cells}
+
+        with open(save_name, 'w') as outfile:
+            cp.dump(data, outfile)
+        print("Wrote:  %s" % (save_name,))
+
+    def load(self, filename):
+        with open(filename,'r') as infile:
+            data = cp.load(infile)
+        self._w, self._h = data['w'], data['h']
+        self._colors = data['colors']
+        self._cells = data['cells']
+        pos = np.sum([c.x.shape[0] for c in self._cells])
+        self._pos = np.array([pos, pos])
+        self._cell_editor = None
+        self._spacer_editor = None
+        self._current_pattern = PatternCell(None, origin=np.array(self._pos))
+        self._image = None
+        self._display_image = None  # same here
+        print("Loaded:  %s" % (filename, ))
 
     def _update_image(self):  # update current blanket
         if self._current_pattern.x is None:  # when starting
@@ -202,21 +236,11 @@ class BlanketEditor(object):
                 self._display_image = None
                 self._image = None
 
-    def save(self):
-        filenum = 0
-        while True:
-            filename = "blanket_%.4i.png" % (filenum,)
-            if os.path.exists(filename):
-                filenum += 1
-            else:
-                break
-        cv2.imwrite(filename, self._image[:, :, ::-1])
-
-        print("Wrote:  %s" % (filename,))
-
 
 def setup():
     parser = argparse.ArgumentParser(description='Design blanket pattern.')
+    parser.add_argument('--load', '-l', type=str, help="Load blanket in progress.", default=None)
+
     parser.add_argument('--symmetry', '-s', type=str,
                         help="Blanket symmetry, must be one of:  %s." % (", ".join(BlanketEditor.SYMMETRIES),),
                         default='rotational')
@@ -224,7 +248,7 @@ def setup():
     parser.add_argument('--height', '-t', type=float, help="Width of blanket (total stitches)", default=128)
     parsed = parser.parse_args()
 
-    b = BlanketEditor(parsed.width, parsed.height, parsed.symmetry)
+    b = BlanketEditor(parsed.width, parsed.height, parsed.symmetry, load_file=parsed.load)
     return b
 
 

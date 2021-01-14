@@ -1,4 +1,19 @@
 import numpy as np
+import os
+
+
+def get_incremental_filename(prefix, suffix, digits=4):
+
+    fmt_string = "%s%%.%ii%s" % (prefix, digits, suffix)
+
+    filenum = 0
+    while True:
+        filename = fmt_string % (filenum,)
+        if os.path.exists(filename):
+            filenum += 1
+        else:
+            break
+    return filename
 
 
 COLORS = {'cream': np.array((0xff, 0xfd, 0xd0)).astype(np.uint8),
