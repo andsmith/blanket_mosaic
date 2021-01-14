@@ -34,7 +34,7 @@ class BlanketEditor(object):
         self._cell_editor = None
         self._spacer_editor = None
         self._pos = (0, 0)  # where next cell goes
-        self._current_pattern = PatternCell(None, origin=self._pos)
+        self._current_pattern = PatternCell(None, origin=np.array(self._pos))
 
         # blanket & w/annotations
         self._image = None
@@ -48,7 +48,9 @@ class BlanketEditor(object):
         x = np.zeros((self._h, self._w), dtype=np.int64)
 
         # add cell rows
+        print("Cells:\n\t%s" % ("\n\t".join(["%s, %s" % (c.x.shape, c.origin) for c in self._cells+ [self._current_pattern]]), ))
         for c in self._cells + [self._current_pattern]:
+
             # draw horizontal:
 
             spacer = c.spacer if c.spacer is not None else np.zeros((c.x.shape[0], 0))
@@ -57,7 +59,6 @@ class BlanketEditor(object):
 
             n_chunks_w = int((self._w - c.origin[1] * 2.0 - c.x.shape[0] - spacer.shape[1]) / c.x.shape[1])
             n_chunks_h = int((self._h - c.origin[0] * 2.0 - c.x.shape[0] - spacer.shape[1]) / c.x.shape[1])
-            print(n_chunks_h)
             for w_chunk in range(n_chunks_w):
                 row = c.origin[0]
                 col = c.origin[1] + w_chunk * c.x.shape[1]
@@ -73,8 +74,9 @@ class BlanketEditor(object):
                 if spacer.size > 0:
                     row += spacer_vert.shape[0]
                     if h_chunk == 0:
-                        x[c.origin[0] + c.x.shape[0]: c.origin[0] + c.x.shape[0] + cx_vert.shape[0],
-                        c.origin[1]: c.origin[1] + spacer_vert.shape[1]] = spacer_vert
+
+                        x[c.origin[0] + c.x.shape[0]: c.origin[0] + c.x.shape[0] + spacer_vert.shape[0],
+                          c.origin[1]: c.origin[1] + spacer_vert.shape[1]] = spacer_vert
                 x[row: row + cx_vert.shape[0], col:col + cx_vert.shape[1]] = cx_vert
 
         # make into viewable image
@@ -115,7 +117,7 @@ class BlanketEditor(object):
                 self._current_pattern.spacer = new_cell_data
             else:
                 raise Exception("Pattern update called from thread with unrecognized name:  %s" % (name,))
-            print("Scheduling update")
+
             self._image = None
             self._display_image = None
         else:
@@ -127,11 +129,11 @@ class BlanketEditor(object):
             # Change state
             if self._cell_editor is None:  # signal to start a new layer of cells
                 shape = self._cells[-1].x.shape if len(self._cells) > 0 else (2, 2)
-                print("Editor starting...")
+
                 self._cell_editor = CellEditor(w=shape[1], h=shape[0], colors=self._colors,
                                                change_callback=self._update_pattern_callback,
                                                asynch=True, name='main_pattern')
-                print("Editor started.")
+
                 self._image = None
                 self._display_image = None
 
@@ -144,18 +146,19 @@ class BlanketEditor(object):
                     self._spacer_editor.finish()
                     self._spacer_editor = None
 
+                self._cell_editor.finish()
                 self._cell_editor = None
 
                 # advance, using last used shape
                 self._pos += np.array(self._cells[-1].x.shape)
 
                 # set up for next cell editor
-                self._current_pattern = PatternCell(x=None, origin=self._pos)
+                self._current_pattern = PatternCell(x=None, origin=self._pos.copy())
 
             # updated display
             # with self._dimage_lock:  # prob. unnecessary
             if self._display_image is None:
-                print("Making new image")
+
                 self._refresh()
 
             if self._display_image is not None:
@@ -170,7 +173,9 @@ class BlanketEditor(object):
                 break
             if keymatch(key, ['S', 's']):
                 self.save()
-            elif keymatch(key, ' '):
+
+            if keymatch(key, ' '):
+
                 if self._spacer_editor is None and self._cell_editor is not None:
                     # Add a spacer, if not already existing.
                     self._spacer_editor = CellEditor(w=1,
@@ -182,8 +187,9 @@ class BlanketEditor(object):
 
                 else:
                     # Otherwise disconnect & delete it
+
                     self._spacer_editor.finish()
-                    self._current_pattern = None
+                    self._current_pattern.spacer=None
                     self._display_image = None
                     self._image = None
 

@@ -40,8 +40,8 @@ class CellEditor(object):
          :param hotkeys: dict defining hotkeys, see DEFAULT_HOTKEYS for options
 
         """
-        print("New Cell:  w=%i, h=%i" % (w, h))
-        print("Commands - <> adjust width, ;' adjust height")
+        print("New Cell created:  w=%i, h=%i" % (w, h))
+        print("\tCommands - <> adjust width, .\n")
         self._pixel_size = 32
         self._grid_size = 2
         self._callback = change_callback
@@ -58,7 +58,7 @@ class CellEditor(object):
         for k in self._constraints:
             self._constraints[k].set_constraint(k, self)
         self._disp_window_name = "Cell Editor - %s" % (name,)
-        print("Cell Editor hotkeys: \nF to finish\n =/- magnify, \n o/p height pixels, \n[/] width pixels")
+        print("Cell Editor hotkeys: \n\tF to finish\n\t=- magnify, \n\top height pixels, \n\t[] width pixels\n\t;' spacer height\n")
 
         cv2.namedWindow(self._disp_window_name)
         cv2.startWindowThread()
@@ -86,6 +86,7 @@ class CellEditor(object):
 
     def _update(self, no_callback=False, no_regenerate=False):
         if not no_regenerate:
+            print(self._x)
             self._image = make_pixel_image(self._x, self._colors, self._pixel_size, self._grid_size)
         if self._callback is not None and not no_callback:
             self._callback(self._x, self._name)
@@ -157,13 +158,11 @@ class CellEditor(object):
         :param inc:  int, change to make, i.e. 2 means add 2 pixel rows, etc.
         :param depth:  limit constraint propagation recursion
         """
-        #import ipdb; ipdb.set_trace()
-        print("CD called")
-        # import ipdb; ipdb.set_trace()
         with self._mutex:
-            print("Changing dims:  %s  %i" % (dim, inc))
+
             if not self.dim_is_locked(dim):
                 if inc < 0:  # shrink
+
                     if dim == "w":
                         self._width += inc
                         self._width = 1 if self._width < 1 else self._width
@@ -172,7 +171,7 @@ class CellEditor(object):
                         self._height += inc
                         self._height = 1 if self._height < 1 else self._height
                         if inc < 1:  # shrink
-                            self._x = self._x[:self._height, :self._height]
+                            self._x = self._x[:self._height, :self._width]
 
                 elif inc > 0:  # grow
                     if dim == 'w':
@@ -183,6 +182,7 @@ class CellEditor(object):
                         self._x = np.vstack((self._x, np.zeros((1, self._x.shape[1]), dtype=self._x.dtype)))
                 if dim in self._constraints and isinstance(self._constraints[dim], CellEditor) and depth > 0:
                     self._constraints[dim].change_dims(dim, inc, depth - 1)
+        print("%s - CD done - w=%i, h=%i, x.shape=%s" % (self._name, self._width, self._height, self._x.shape))
 
         self._update()
 
@@ -225,15 +225,17 @@ class CellEditor(object):
 
             elif keymatch(key, self._hotkeys['spacer_width_decrease']):
                 if self._name =="spacer_pattern":
-                    self.change_dims('h', -1)
+                    self.change_dims('w', -1)
             elif keymatch(key, self._hotkeys['spacer_width_increase']):
                 if self._name == "spacer_pattern":
-                    self.change_dims('h', 1)
+                    self.change_dims('w', 1)
 
 
 
             elif not key == 0xFF:
                 print("Unknown keypress:  %s" % (key,))
+        cv2.destroyWindow(self._disp_window_name)
+        print("%s - Ended main loop." % (self._name, ))
 
 
 def cell_editor_test():
