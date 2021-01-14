@@ -232,10 +232,6 @@ class CellEditor(object):
                 if self._name == "spacer_pattern":
                     self.change_dims('w', 1)
 
-
-
-            elif not key == 0xFF:
-                print("Unknown keypress:  %s" % (key,))
         cv2.destroyWindow(self._disp_window_name)
         print("%s - Ended main loop." % (self._name,))
 

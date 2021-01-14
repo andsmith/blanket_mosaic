@@ -5,7 +5,7 @@ import cv2
 from threading import Thread
 from cell import CellEditor
 import cPickle as cp
-
+from copy import deepcopy
 from util import COLORS, make_pixel_image, keymatch, get_incremental_filename
 
 
@@ -17,6 +17,10 @@ class PatternCell(object):
 
 
 class BlanketEditor(object):
+    MAX_SIZE = 1024
+    MIN_SIZE = 2
+    TARGET_WIDTH_PX = 900
+
     SYMMETRIES = ('rotational', 'translational')
 
     def __init__(self, w, h, symmetry, colors=None, load_file=None):
@@ -27,7 +31,7 @@ class BlanketEditor(object):
         self._finished = False
         self._cells = []
         self._colors = colors if colors is not None else np.array([COLORS['cream'], COLORS['sky_blue']])
-        self._px_size = 8
+        self._recalculate_px_size()
         self._box_thickness = 1
         self._rotation_direction = 1
         self._window_name = "mosaic blanket!"
@@ -44,9 +48,16 @@ class BlanketEditor(object):
         self._image = None
         self._display_image = None  # same here
 
+    def _recalculate_px_size(self):
+        w = int(self.TARGET_WIDTH_PX / self._w)
+        h = int(self.TARGET_WIDTH_PX / self._h)
+        self._px_size = np.min([w, h])
+        self._image = None
+        self._display_image = None  # same here
+
     def save(self):
         image_name = get_incremental_filename("blanket_", ".png")
-        save_name = get_incremental_filename("blanket_",".pkl")
+        save_name = get_incremental_filename("blanket_", ".pkl")
         cv2.imwrite(image_name, self._image[:, :, ::-1])
         print("Wrote:  %s" % (image_name,))
 
@@ -60,7 +71,7 @@ class BlanketEditor(object):
         print("Wrote:  %s" % (save_name,))
 
     def load(self, filename):
-        with open(filename,'r') as infile:
+        with open(filename, 'r') as infile:
             data = cp.load(infile)
         self._w, self._h = data['w'], data['h']
         self._colors = data['colors']
@@ -72,7 +83,65 @@ class BlanketEditor(object):
         self._current_pattern = PatternCell(None, origin=np.array(self._pos))
         self._image = None
         self._display_image = None  # same here
-        print("Loaded:  %s" % (filename, ))
+        print("Loaded:  %s" % (filename,))
+
+    def _get_allowable_sizes(self, include_current=False):
+        """
+        All existing cells must be in whole number multiples, and account for the spacer if present.
+        :param include_current:  Also constrained by current pattern?
+        :return:  list of possible widths of blanket compatible with all cells
+        """
+        # Start out with all possible sizes & prune them for each successive cell
+        allowed = np.arange(self.MIN_SIZE, self.MAX_SIZE + 1, dtype=np.int64)
+        cell_list = self._cells + [self._current_pattern] if include_current else deepcopy(self._cells)
+
+        for c_i, c in enumerate(cell_list):
+            multiples = np.arange(1, int(self._w / c.x.shape[1]) + 1)
+            # possible amounts of space taken by cell in both directions
+            possible_widths = c.x.shape[1] * multiples + c.origin[0] * 2
+            if c.spacer is not None:
+                possible_widths += + c.spacer.shape[1]
+            allowed = [x for x in allowed if x in possible_widths]
+            print("Compat. round %i, reduced to %i" % (c_i, len(allowed)))
+
+        print("Allowable widths:  %s" % (allowed[:100],))
+        return allowed
+
+    def _adjust_size(self, dim='w', dir=0, max_frac_change=0.5):
+        """
+        Change size of blanket.
+        Satisfy all constraints.
+        Mark images for refresh.
+
+        :param dim:  must be in ['w', 'h'], i.e. width or height
+        :param dir:  must be one of [-1, 1], to shrink, or grow dimension.
+            (use dir=1 to get closest size that fits and is not smaller than current size)
+        """
+        include_current = False
+        allowed = self._get_allowable_sizes(include_current=include_current)
+        size_to_match = self._w if dim == 'w' else self._h
+        remainders = allowed - size_to_match
+        new_size = size_to_match
+
+        if dir == -1:
+            remainders = remainders[remainders < 0]  # must shrink
+            if remainders.size == 0:
+                print("No compatible size found!")
+            else:
+                new_size = size_to_match + np.max(remainders)
+        elif dir==1:
+            remainders = remainders[remainders >= 0]  # must shrink
+            if remainders.size == 0:
+                print("No compatible size found!")
+            else:
+                new_size = size_to_match + np.min(remainders)
+
+        if dim=='w':
+            self._w = new_size
+        elif dim == 'h':
+            self._h = new_size
+        self._image = None
+        self._display_image = None
 
     def _update_image(self):  # update current blanket
         if self._current_pattern.x is None:  # when starting
@@ -226,15 +295,22 @@ class BlanketEditor(object):
                     self._image = None
 
             elif keymatch(key, ['A', 'a']):
-                self._px_size = int(self._px_size * 0.75)
-                self._px_size = 4 if self._px_size < 4 else self._px_size
-                self._display_image = None
-                self._image = None
+                self._adjust_size(dim='h', dir=-1)
+                print("Shrinking blanket height:  %s" % (self._h, ))
+                self._recalculate_px_size()
             elif keymatch(key, ['Z', 'z']):
-                self._px_size = int(self._px_size * 1.25)
-                self._px_size = 4 if self._px_size < 4 else self._px_size  # don't get too small
-                self._display_image = None
-                self._image = None
+                self._adjust_size(dim='h', dir=1)
+                print("Growing blanket height:  %s" % (self._h,))
+                self._recalculate_px_size()
+
+            elif keymatch(key, ['X', 'x']):
+                self._adjust_size(dim='w', dir=-1)
+                print("Shrinking blanket width:  %s" % (self._w,))
+                self._recalculate_px_size()
+            elif keymatch(key, ['C', 'c']):
+                self._adjust_size(dim='w', dir=1)
+                print("Growing blanket width:  %s" % (self._w,))
+                self._recalculate_px_size()
 
 
 def setup():
@@ -244,8 +320,8 @@ def setup():
     parser.add_argument('--symmetry', '-s', type=str,
                         help="Blanket symmetry, must be one of:  %s." % (", ".join(BlanketEditor.SYMMETRIES),),
                         default='rotational')
-    parser.add_argument('--width', '-w', type=float, help="Width of blanket (total stitches)", default=128)
-    parser.add_argument('--height', '-t', type=float, help="Width of blanket (total stitches)", default=128)
+    parser.add_argument('--width', '-w', type=float, help="Width of blanket (total stitches)", default=8)
+    parser.add_argument('--height', '-t', type=float, help="Width of blanket (total stitches)", default=8)
     parsed = parser.parse_args()
 
     b = BlanketEditor(parsed.width, parsed.height, parsed.symmetry, load_file=parsed.load)
